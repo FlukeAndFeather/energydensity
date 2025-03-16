@@ -86,4 +86,44 @@ ggplot(fish, aes(mass_g, ed_kjg, color = species)) +
         legend.position.inside = c(0.99, 0.99),
         legend.justification = c(1, 1))
 
+ed_mod <- brm(ed_kjg ~ mass_g * species + mass_g * region,
+              fish,
+              family = Gamma(link = "log"),
+              prior = c(
+                prior(cauchy(0, 10), class = "Intercept"),
+                prior(cauchy(0, 5), class = "b"),
+                prior(exponential(1), class = "shape")
+              ),
+              cores = 4)
+
+sim2brm <- tribble(
+  ~sim_param,         ~brm_param,
+  "intercept",        "b_Intercept",
+  "clubhook",         "b_speciesclubhook",
+  "lanternfish",      "b_specieslanternfish",
+  "market",           "b_speciesmarket",
+  "mass",             "b_mass_g",
+  "south",            "b_regionsouth",
+  "mass_clubhook",    "b_mass_g:speciesclubhook",
+  "mass_lanternfish", "b_mass_g:specieslanternfish",
+  "mass_market",      "b_mass_g:speciesmarket",
+  "mass_south",       "b_mass_g:regionsouth"
+)
+hdis <- bayestestR::hdi(ed_mod, ci = 0.95)
+maps <- bayestestR::map_estimate(ed_mod)
+tibble(
+  param = names(ed_betas),
+  value = ed_betas
+) %>%
+  left_join(sim2brm, by = c(param = "sim_param")) %>%
+  mutate(hdi_lo = map_dbl(brm_param, \(p) hdis$CI_low[hdis$Parameter == p]),
+         hdi_hi = map_dbl(brm_param, \(p) hdis$CI_high[hdis$Parameter == p]),
+         map = map_dbl(brm_param, \(p) maps$MAP_Estimate[maps$Parameter == p])) %>%
+  ggplot(aes(y = param)) +
+  geom_pointrange(aes(x = map, xmin = hdi_lo, xmax = hdi_hi),
+                  color = "cornflowerblue",
+                  linewidth = 1.5) +
+  geom_point(aes(x = value), color = "firebrick") +
+  theme_bw()
+
 
